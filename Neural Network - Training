@@ -1,0 +1,207 @@
+import numpy as np
+from math import exp
+import json
+import os
+import pandas as pd
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn import preprocessing
+from sklearn.model_selection import train_test_split
+
+
+
+print('Loading train data...')
+# Reading the yummly dataset from the location
+with open('./train.json', encoding='utf-8', errors='replace') as f:
+    data = f.read()[3:-3]
+    data = data.split("},")
+    data.append("dummy")
+    meals = []
+    for each in data[:-1]:
+        each = each + "}"
+        meals.append(json.loads(each))
+
+# list for ingredients , id , cuising
+itemList = []
+itemID = []
+meal_cuisine = []
+
+# split the json file into id, cuisine and ingredients respectively
+for each in meals:
+    m = ""
+    itemID.append(each['id'])
+    meal_cuisine.append(each['cuisine'])
+    for each1 in each['ingredients']:
+        # replace space in the ingredients with underscore
+        each1 = each1.replace(' ', '_')
+        m += each1 + ' '
+    itemList.append(m)
+
+# convert all of the ingredients into array of unique value (0 or 1) for train data
+vectorizer = CountVectorizer()
+vectors = vectorizer.fit_transform(itemList).toarray()
+print("Number of rows:", len(vectors))
+print("Number of columns:", len(vectors[0]))
+
+# test data
+print('\nLoading test data...')
+with open('./test.json', encoding='utf-8', errors='replace') as g:
+    data = g.read()[3:-3]
+    data = data.split("},")
+    data.append("dummy")
+    meals_test = []
+    for each in data[:-1]:
+        each = each + "}"
+        meals_test.append(json.loads(each))
+
+# list for ingredients, id, cuisine
+itemList_test = []
+itemID_test = []
+meal_cuisine_test = []
+
+# split the json file into id, cuisine and ingredients respectively
+for each in meals_test:
+    m = ""
+    itemID_test.append(each['id'])
+    for each1 in each['ingredients']:
+        # replace space in the ingredients with underscore
+        each1 = each1.replace(' ', '_')
+        m += each1 + ' '
+    itemList_test.append(m)
+
+# convert all of the ingredients into array of unique value (0 or 1) for test data, using the train vocabulary
+vectorizer2 = CountVectorizer(vocabulary=vectorizer.vocabulary_)
+vectors_test = vectorizer2.fit_transform(itemList_test).toarray()
+print("Number of rows:", len(vectors_test))
+print("Number of columns:", len(vectors_test[0]))
+
+print('\nData Wrangling for the neurons...')
+le = preprocessing.LabelEncoder()
+data = {"cuisine": meal_cuisine}
+dataframe = pd.DataFrame(data)
+y = dataframe.apply(le.fit_transform)
+
+X_train = vectors
+y_train = y
+y_train = y_train['cuisine']
+
+print('Training the NN...')
+## NN Parameters
+trainingSet = X_train
+targetSet = y_train
+learningRate = 0.3
+INPUT_LAYER_SIZE = len(X_train[0])
+HIDDEN_LAYER_SIZE1 = 15
+HIDDEN_LAYER_SIZE = 15
+OUTPUT_LAYER_SIZE = y_train.max() + 1
+print('input size:', INPUT_LAYER_SIZE, ', output size: ', OUTPUT_LAYER_SIZE)
+
+# init weights
+weight1 = np.random.default_rng().standard_normal(size=(INPUT_LAYER_SIZE, HIDDEN_LAYER_SIZE),
+                                                  dtype=np.float32) - 0.5
+bias1 = np.random.default_rng().standard_normal(size=HIDDEN_LAYER_SIZE, dtype=np.float32) - 0.5
+weight2 = np.random.default_rng().standard_normal(size=(HIDDEN_LAYER_SIZE, HIDDEN_LAYER_SIZE1),
+                                                  dtype=np.float32) - 0.5
+bias2 = np.random.default_rng().standard_normal(size=HIDDEN_LAYER_SIZE1, dtype=np.float32) - 0.5
+weight3 = np.random.default_rng().standard_normal(size=(HIDDEN_LAYER_SIZE1, OUTPUT_LAYER_SIZE),
+                                                  dtype=np.float32) - 0.5
+bias3 = np.random.default_rng().standard_normal(size=OUTPUT_LAYER_SIZE, dtype=np.float32) - 0.5
+
+diffError = float("inf")
+epoch = 0
+currTSE = 0
+prevTSE = 0
+stoppingError = 0.000001
+numExamples = len(trainingSet)
+
+all_output_signals = np.zeros((20, 20), np.float32)
+np.fill_diagonal(all_output_signals, 1.0)
+z_inj = [None] * HIDDEN_LAYER_SIZE
+zj = [None] * HIDDEN_LAYER_SIZE
+z_inj1 = [None] * HIDDEN_LAYER_SIZE1
+zj1 = [None] * HIDDEN_LAYER_SIZE1
+y_ink = [None] * OUTPUT_LAYER_SIZE
+yk = [None] * OUTPUT_LAYER_SIZE
+small_delta_k = [None] * OUTPUT_LAYER_SIZE
+small_delta_in_j = [None] * HIDDEN_LAYER_SIZE
+small_delta_in_j1 = [None] * HIDDEN_LAYER_SIZE1
+small_delta_j = [None] * HIDDEN_LAYER_SIZE
+
+import time
+
+start_time = time.time()
+
+while (diffError > stoppingError and epoch < 50):
+    totalTemp = 0
+    for indexIter in range(numExamples):
+        # setting input signal and output signals
+        input_signals = np.array(trainingSet[indexIter], dtype=np.float32)
+        output_signals = all_output_signals[targetSet.iloc[indexIter]]
+
+        # calculate feed forward for hidden layer's neurons
+        # sums weighted input signals
+        z_inj = np.add(input_signals @ weight1, bias1)
+
+        # apply activation function
+        zj = 1.0 / (1.0 + np.exp(-z_inj))
+
+        # calculate feed forward for second hidden layer's neurons
+        # sums weighted input signals
+        z_inj1 = np.add(zj @ weight2, bias2)
+
+        # apply activation function
+        zj1 = 1.0 / (1.0 + np.exp(-z_inj1))
+
+        # calculate feed forward for output layer's neurons
+        # sums weighted input signals
+        y_ink = np.add(zj1 @ weight3, bias3)
+
+        # apply activation function
+        yk = 1.0 / (1.0 + np.exp(-y_ink))
+
+        # Back propagate the error
+        output_error = output_signals - yk
+        small_delta_k = np.multiply(np.multiply(output_error, yk), (1 - yk))
+        totalTemp += output_error @ output_error
+
+        # processing hidden layer 1
+        small_delta_in_j1 = small_delta_k @ weight3.T
+        small_delta_j1 = np.multiply(np.multiply(small_delta_in_j1, zj1), (1 - zj1))
+
+        # processing hidden layer 2
+        small_delta_in_j = small_delta_j1 @ weight2.T
+        small_delta_j = np.multiply(np.multiply(small_delta_in_j, zj), (1 - zj))
+
+        ############## Updating
+        # update delta_w for bias in output layer
+        bias3 += np.multiply(learningRate, small_delta_k)
+
+        # update delta_w for hidden-output layer
+        weight3 += np.multiply(np.mat(zj1).T * np.mat(small_delta_k), learningRate)
+
+        # update delta_w for bias in output layer
+        bias2 += np.multiply(learningRate, small_delta_j1)
+
+        # update delta_w for hidden-output layer
+        weight2 += np.multiply(np.mat(zj).T * np.mat(small_delta_j1), learningRate)
+
+        # update delta_w for bias in hidden layer
+        bias1 += np.multiply(learningRate, small_delta_j)
+
+        # update delta_w for input-hidden layer
+        weight1 += np.multiply(np.mat(input_signals).T * np.mat(small_delta_j), learningRate)
+
+        # calculating Total Squared Error
+        currTSE += totalTemp
+
+    diffError = abs(prevTSE - currTSE)
+    if (epoch % 2 == 0) or (diffError < stoppingError):
+        print('TSE: ', currTSE, ', epoch: ', epoch, ', Error diff: ', diffError)
+        print("--- %s seconds ---" % (time.time() - start_time))
+
+    epoch += 1
+    prevTSE = currTSE
+    currTSE = 0
+
+print("--- %s seconds ---" % (time.time() - start_time))
+
+    
