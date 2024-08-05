@@ -1,0 +1,105 @@
+#install package
+import json
+import os
+import pandas as pd
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.tree import DecisionTreeClassifier
+#os.system('cls')
+
+print('Loading train data...')
+# Reading the yummly dataset from the location
+with open('./train.json', encoding='utf-8', errors='replace') as f:
+    data = f.read()[3:-3]
+    #print(data)
+    data = data.split("},")
+    data.append("dummy")
+    meals = []
+    for each in data[:-1]:
+        each = each + "}"
+        meals.append(json.loads(each))
+
+#list for ingredients , id , cuising
+itemList = []
+itemID = []
+meal_cuisine = []
+
+# split the json file into id, cuisine and ingredients respectively
+for each in meals:
+    m = ""
+    itemID.append(each['id'])
+    meal_cuisine.append(each['cuisine'])
+    for each1 in each['ingredients']:
+        #replace space in the ingredients with underscore
+        each1 = each1.replace(' ', '_')
+        m += each1 + ' '
+    itemList.append(m)
+
+#convert the ingredients into array of 0 ,1 for train data
+vectorizer = CountVectorizer()
+vectors = vectorizer.fit_transform(itemList).toarray() 
+print("Number of rows:", len(vectors))
+print("Number of columns:", len(vectors[0]))
+print(vectors[:5])
+print(meal_cuisine)
+
+#test data
+print('\nLoading test data...')
+with open('./test.json', encoding='utf-8', errors='replace') as g:
+    data = g.read()[3:-3]
+    #print((data))
+    data = data.split("},")
+    data.append("dummy")
+    meals_test = []
+    for each in data[:-1]:
+        each = each + "}"
+        meals_test.append(json.loads(each))
+    
+#list for ingredients, id, cuisine
+itemList_test = []
+itemID_test = []
+meal_cuisine_test = []
+
+# split the json file into id, cuisine and ingredients respectively
+for each in meals_test:
+    m = ""
+    itemID_test.append(each['id'])
+    #meal_cuisine_test.append(each['cuisine'])
+    for each1 in each['ingredients']:
+        #replace space in the ingredients with underscore
+        each1 = each1.replace(' ', '_')
+        m += each1 + ' '
+    itemList_test.append(m)
+
+print(itemList_test[0])
+
+#convert the ingredients into array of 0 ,1 for test data
+vectorizer2 = CountVectorizer(vocabulary=vectorizer.vocabulary_)
+vectors_test = vectorizer2.fit_transform(itemList_test).toarray()
+print("Number of rows:", len(vectors_test))
+print("Number of columns:", len(vectors_test[0]))
+
+print('\nDecision Tree...')
+'''
+d = {ni: indi for indi, ni in enumerate(set(meal_cuisine))}
+numbers = [d[ni] for ni in meal_cuisine]
+print(d)
+dTC = DecisionTreeClassifier(criterion='gini',max_depth=3)
+dTC.fit(vectors, numbers)
+'''
+dTC = DecisionTreeClassifier(criterion='gini',max_depth=4)
+dTC.fit(vectors, meal_cuisine)
+
+print('Predicting...')
+
+
+#print('The predicted value: ' , predicted_cuisine)
+
+
+
+predicted_cuisine = dTC.predict(vectors_test)
+#writing predictions to csv file named submission.csv
+data = {"id":itemID_test,"cuisine":predicted_cuisine}
+dataframe = pd.DataFrame(data)
+dataframe.to_csv('submission_entropy_30.csv', index=False)
+print('writing Predictions to csv file complete')
+
