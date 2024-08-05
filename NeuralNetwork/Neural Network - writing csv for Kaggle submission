@@ -1,0 +1,31 @@
+input_test = vectors_test
+NN_output = [None] * len(input_test)
+
+for iter in range(len(input_test)):
+  if (iter % 1000 == 0):
+    print(iter)
+  input_test = vectors_test[iter]
+
+  #sums weighted input signals
+  z_inj = np.add(input_test @ weight1, bias1)
+  
+  #apply activation function
+  zj = 1.0 / (1.0 + np.exp(-z_inj))
+
+  #calculate feed forward for output layer's neurons
+  #sums weighted input signals
+  y_ink = np.add(zj @ weight2, bias2)
+
+  #apply activation function
+  yk = 1.0 / (1.0 + np.exp(-y_ink))    
+
+  NN_output[iter] = np.argmax(yk)
+
+df2 = pd.DataFrame(data=NN_output)
+y2 = df2.apply(le.inverse_transform)
+itemID_df = pd.DataFrame(itemID_test)
+dataframeNN = pd.concat([itemID_df, y2], axis=1)
+dataframeNN.columns = ['id','cuisine']
+
+dataframeNN.to_csv('submission_Examples_HL20_Iter100.csv', index=False)
+print('writing Predictions to csv file complete')
