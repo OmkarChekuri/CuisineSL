@@ -1,0 +1,113 @@
+import json
+import os
+import pandas as pd
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn import preprocessing
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.preprocessing import StandardScaler
+
+
+print('Loading train data...')
+# Reading the yummly dataset from the location
+with open('E:\\OU\\5033MachineLearning\\Project2\\whats-cooking\\train.json', encoding='utf-8', errors='replace') as f:
+    data = f.read()[3:-3]
+    data = data.split("},")
+    data.append("dummy")
+    meals = []
+    for each in data[:-1]:
+        each = each + "}"
+        meals.append(json.loads(each))
+
+#list for ingredients , id , cuising
+itemList = []
+itemID = []
+meal_cuisine = []
+
+# split the json file into id, cuisine and ingredients respectively
+for each in meals:
+    m = ""
+    itemID.append(each['id'])
+    meal_cuisine.append(each['cuisine'])
+    for each1 in each['ingredients']:
+        #replace space in the ingredients with underscore
+        each1 = each1.replace(' ', '_')
+        m += each1 + ' '
+    itemList.append(m)
+
+#convert all of the ingredients into array of unique value (0 or 1) for train data
+vectorizer = CountVectorizer()
+vectors = vectorizer.fit_transform(itemList).toarray() 
+print("Number of rows:", len(vectors))
+print("Number of columns:", len(vectors[0]))
+
+#test data
+print('\nLoading test data...')
+with open('E:\\OU\\5033MachineLearning\\Project2\\whats-cooking\\test.json', encoding='utf-8', errors='replace') as g:
+    data = g.read()[3:-3]
+    data = data.split("},")
+    data.append("dummy")
+    meals_test = []
+    for each in data[:-1]:
+        each = each + "}"
+        meals_test.append(json.loads(each))
+    
+#list for ingredients, id, cuisine
+itemList_test = []
+itemID_test = []
+meal_cuisine_test = []
+
+# split the json file into id, cuisine and ingredients respectively
+for each in meals_test:
+    m = ""
+    itemID_test.append(each['id'])
+    #meal_cuisine_test.append(each['cuisine'])
+    for each1 in each['ingredients']:
+        #replace space in the ingredients with underscore
+        each1 = each1.replace(' ', '_')
+        m += each1 + ' '
+    itemList_test.append(m)
+
+#convert all of the ingredients into array of unique value (0 or 1) for test data, using the train vocabulary
+vectorizer2 = CountVectorizer(vocabulary=vectorizer.vocabulary_)
+vectors_test = vectorizer2.fit_transform(itemList_test).toarray()
+print("Number of rows:", len(vectors_test))
+print("Number of columns:", len(vectors_test[0]))
+
+print('\nData Wrangling for the neurons...')
+le = preprocessing.LabelEncoder()
+data = {"cuisine":meal_cuisine}
+dataframe = pd.DataFrame(data)
+y = dataframe.apply(le.fit_transform)
+
+X_train = vectors
+y_train = y
+
+print('Training the NB...')
+
+import time
+start_time = time.time()
+
+#from sklearn.naive_bayes import GaussianNB
+#gnb = GaussianNB()
+#gnb.fit(X_train, y_train.values.ravel())
+
+#from sklearn.naive_bayes import BernoulliNB
+#bnb = BernoulliNB()
+#bnb.fit(X_train, y_train.values.ravel())
+
+from sklearn.naive_bayes import MultinomialNB
+mnb = MultinomialNB()
+mnb.fit(X_train, y_train.values.ravel())
+
+print("--- %s seconds ---" % (time.time() - start_time))
+
+print('Predicting...')
+predictions2 = mnb.predict(vectors_test)
+df2 = pd.DataFrame(data=predictions2)
+y2 = df2.apply(le.inverse_transform)
+itemID_df = pd.DataFrame(itemID_test)
+dataframeNN = pd.concat([itemID_df, y2], axis=1)
+dataframeNN.columns = ['id','cuisine']
+dataframeNN.to_csv('submission_MultinomialNB_sklearn.csv', index=False)
+print('writing Predictions to csv file complete')
